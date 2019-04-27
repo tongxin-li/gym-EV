@@ -17,6 +17,20 @@ import random  # Handling random number generation
 from random import choices
 from collections import deque  # Ordered collection with ends
 
+class Action:
+
+  def __init__(self, charging_rate = None, feedback = None):
+    self.charging_rate = charging_rate
+    self.feedback = feedback
+  def set_value(self, charging_rate, feedback):
+    self.charging_rate = charging_rate
+    self.feedback = feedback
+
+  def random_sample(self):
+    self.charging_rate = np.random.rand(54)
+    self.feedback = np.random.rand(100)
+
+
 
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
@@ -41,7 +55,7 @@ class EVEnv(gym.Env):
     for i in range(len(self.data)):
       if self.data[i, 0] > self.time - self.time_interval and self.data[i, 0] <= self.time:
         # Add a new active charging station
-        self.state[np.where(self.state[:, 4 == 0])[0][0]] = 1
+        self.state[np.where(self.state[:, 4] == 0)[0][0]] = 1
     self.state[:, 3] = self.state[:, 3] + action.charging_rate * self.time_interval
 
     # Select a new tracking signal
@@ -86,4 +100,11 @@ class EVEnv(gym.Env):
     self.signal = 0
     self.time = data[0, 0]
 
-
+if __name__ == '__main__':
+  env = EVEnv()
+  env.reset()
+  action = Action()
+  action.random_sample()
+  obs, rew, done, info = env.step(action)
+  print(rew)
+  print(action)
