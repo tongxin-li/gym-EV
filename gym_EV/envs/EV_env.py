@@ -7,7 +7,7 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 
 # EV data management
-import data_collection  # Get EV Charging Data
+import gym_EV.envs.data_collection as data_collection# Get EV Charging Data
 import pymongo
 import bson
 from datetime import datetime, timedelta
