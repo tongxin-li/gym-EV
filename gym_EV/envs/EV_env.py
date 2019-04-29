@@ -81,7 +81,7 @@ class EVEnv(gym.Env):
         penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
     unsatisfactory = unsatisfactory + penalty
     reward = self.alpha * stats.entropy(action["Feedback"]) - self.beta * (
-          np.sum(action["ChargingRate"]) - self.signal) ** 2 + unsatisfactory
+          np.sum(action["ChargingRate"]) - self.signal) ** 2 - unsatisfactory
 
     done = True if self.time >= 24 else False
     obs = {}
