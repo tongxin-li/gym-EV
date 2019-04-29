@@ -34,12 +34,12 @@ class EVEnv(gym.Env):
       "RemainingTime": spaces.Box(low=0, high=24, shape=(54,)),
       "RemainingEnergy": spaces.Box(low=0, high=24, shape=(54,)),
       "IsActivated": spaces.MultiBinary(54),
-      "TrackingSignal": spaces.Box(low=0, high=1000, shape=(1,))
+      "TrackingSignal": spaces.Box(low=0, high=20, shape=(1,))
     })
 
     self.action_space = spaces.Dict({
-      "ChargingRate": spaces.Box(low=0, high=100, shape=(54,)),
-      "Feedback": spaces.Box(low=0, high=1, shape=(100,))
+      "ChargingRate": spaces.Box(low=0, high=6, shape=(54,)),
+      "Feedback": spaces.Box(low=0, high=1, shape=(10,))
     })
 
     self.time = 0
@@ -58,9 +58,8 @@ class EVEnv(gym.Env):
         self.state[np.where(self.state[:, 2] == 0)[0][0]] = 1
 
     # Select a new tracking signal
-    levels = np.linspace(0, 1000, num=100)
+    levels = np.linspace(0, 20, num=10)
     self.signal = choices(levels, action["Feedback"])[0]
-    unsatisfactory = 0
     penalty = 0
 
     # Update remaining time
@@ -76,16 +75,19 @@ class EVEnv(gym.Env):
       if self.state[i, 0] == 0:
         penalty = 500 * self.gamma
         # Inactivate the EV
-        self.state[i, 2] = 0
-      else:
-        penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
-    unsatisfactory = unsatisfactory + penalty
-    reward = self.alpha * stats.entropy(action["Feedback"]) - self.beta * (
-          np.sum(action["ChargingRate"]) - self.signal) ** 2 + unsatisfactory
+        self.state[i, :] = 0
+      # else:
+      #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
+    reward = {}
+    reward["Flexibility"] = self.alpha * stats.entropy(action["Feedback"])
+    reward["TrackingError"] = - self.beta * (
+          np.sum(action["ChargingRate"]) - self.signal) ** 2
+    reward["OverduePenalty"] = - penalty
+
 
     done = True if self.time >= 24 else False
     obs = {}
-    obs["state"] = self.state
+    obs["state"] = self.state.copy()
     obs["signal"] = self.signal
     info = {}
     return obs, reward, done, info
@@ -109,7 +111,7 @@ class EVEnv(gym.Env):
     self.signal = 0
     self.time = data[0, 0]
     obs = {}
-    obs["state"] = self.state
+    obs["state"] = self.state.copy()
     obs["signal"] = self.signal
     return obs
 
