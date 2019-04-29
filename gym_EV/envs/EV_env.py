@@ -59,8 +59,9 @@ class EVEnv(gym.Env):
 
     # Select a new tracking signal
     levels = np.linspace(0, 1000, num=100)
-    self.signal = choices(levels, action["Feedback"])
+    self.signal = choices(levels, action["Feedback"])[0]
     unsatisfactory = 0
+    penalty = 0
 
     # Update remaining time
     time_result = self.state[:, 0] - self.time_interval
@@ -92,7 +93,7 @@ class EVEnv(gym.Env):
   def reset(self):
     # Select a random day and restart
     day = random.randint(1, 59)
-    name = 'data/data' + str(day) + '.npy'
+    name = '/Users/chenliang/Workspace/gym-EV/data/data' + str(day) + '.npy'
     # Load data
     data = np.load(name)
     self.data = data
@@ -114,12 +115,3 @@ class EVEnv(gym.Env):
 
 
 
-
-if __name__ == '__main__':
-  env = EVEnv()
-  env.reset()
-  action = Action()
-  action.random_sample()
-  obs, rew, done, info = env.step(action)
-  print(rew)
-  print(action)
