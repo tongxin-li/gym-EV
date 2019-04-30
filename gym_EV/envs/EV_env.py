@@ -7,10 +7,10 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 
 # EV data management
-import gym_EV.envs.data_collection as data_collection# Get EV Charging Data
-import pymongo
-import bson
-from datetime import datetime, timedelta
+# import gym_EV.envs.data_collection as data_collection# Get EV Charging Data
+# import pymongo
+# import bson
+# from datetime import datetime, timedelta
 
 # RL packages
 import random  # Handling random number generation
@@ -70,12 +70,15 @@ class EVEnv(gym.Env):
     charging_result = self.state[:, 1] - action["ChargingRate"] * self.time_interval
     self.state[:, 1] = charging_result.clip(min=0)
 
+
     for i in np.nonzero(self.state[:, 2])[0]:
-      # The EV is overdue
+      # The EV has no remaining time
       if self.state[i, 0] == 0:
-        penalty = 500 * self.gamma
-        # Inactivate the EV
+        # Deactivate the EV
         self.state[i, :] = 0
+        # The EV is overdue
+        if self.state[i, 1] > 0:
+          penalty = 100 * self.gamma
       # else:
       #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
     reward = {}
@@ -95,7 +98,7 @@ class EVEnv(gym.Env):
   def reset(self):
     # Select a random day and restart
     day = random.randint(1, 59)
-    name = '/Users/chenliang/Workspace/gym-EV/data/data' + str(day) + '.npy'
+    name = '/Users/tonytiny/Documents/Github/RLScheduling/real/data' + str(day) + '.npy'
     # Load data
     data = np.load(name)
     self.data = data
