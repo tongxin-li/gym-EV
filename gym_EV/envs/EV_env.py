@@ -78,11 +78,11 @@ class EVEnv(gym.Env):
         self.state[i, :] = 0
         # The EV is overdue
         if self.state[i, 1] > 0:
-          penalty = 100 * self.gamma
+          penalty = 10 * self.gamma
       # else:
       #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
     reward = {}
-    reward["Flexibility"] = self.alpha * stats.entropy(action["Feedback"])
+    reward["Flexibility"] = self.alpha * (stats.entropy(action["Feedback"])) ** 2
     reward["TrackingError"] = - self.beta * (
           np.sum(action["ChargingRate"]) - self.signal) ** 2
     reward["OverduePenalty"] = - penalty
