@@ -57,11 +57,6 @@ class EVEnv(gym.Env):
         # Add a new active charging station
         self.state[np.where(self.state[:, 2] == 0)[0][0]] = 1
 
-    # Select a new tracking signal
-    levels = np.linspace(0, 20, num=10)
-    self.signal = choices(levels, action["Feedback"])[0]
-    penalty = 0
-
     # Update remaining time
     time_result = self.state[:, 0] - self.time_interval
     self.state[:, 0] = time_result.clip(min=0)
@@ -70,22 +65,28 @@ class EVEnv(gym.Env):
     charging_result = self.state[:, 1] - action["ChargingRate"] * self.time_interval
     self.state[:, 1] = charging_result.clip(min=0)
 
-
+    penalty = 0
     for i in np.nonzero(self.state[:, 2])[0]:
       # The EV has no remaining time
       if self.state[i, 0] == 0:
-        # Deactivate the EV
-        self.state[i, :] = 0
         # The EV is overdue
         if self.state[i, 1] > 0:
-          penalty = 10 * self.gamma
+          penalty = 10 * self.gamma * self.state[i, 1]
+        # Deactivate the EV and reset
+        self.state[i, :] = 0
       # else:
       #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
+
+    ## Update rewards
     reward = {}
     reward["Flexibility"] = self.alpha * (stats.entropy(action["Feedback"])) ** 2
     reward["TrackingError"] = - self.beta * (
           np.sum(action["ChargingRate"]) - self.signal) ** 2
     reward["OverduePenalty"] = - penalty
+
+    # Select a new tracking signal
+    levels = np.linspace(0, 20, num=10)
+    self.signal = choices(levels, action["Feedback"])[0]
 
 
     done = True if self.time >= 24 else False
