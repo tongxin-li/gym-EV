@@ -24,7 +24,7 @@ class EVEnv(gym.Env):
 
   def __init__(self):
     # Parameter for reward function
-    self.alpha = 1
+    self.alpha = 5
     self.beta = 1
     self.gamma = 1
     self.signal = None
@@ -100,8 +100,8 @@ class EVEnv(gym.Env):
       #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
 
     # Update rewards
-    reward = self.alpha * (stats.entropy(action[-self.n_levels:])) ** 2 - self.beta * (
-           np.sum(action[:self.n_EVs]) - self.signal) ** 2 - penalty
+    reward = (self.alpha * (stats.entropy(action[-self.n_levels:])) ** 2 - self.beta * (
+           np.sum(action[:self.n_EVs]) - self.signal) ** 2 - penalty) / 100
 
     # Select a new tracking signal
     levels = np.linspace(0, 20, num=3)
