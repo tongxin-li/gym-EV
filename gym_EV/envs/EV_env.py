@@ -24,47 +24,40 @@ class EVEnv(gym.Env):
 
   def __init__(self):
     # Parameter for reward function
-    self.alpha = 0
+    self.alpha = 5
     self.beta = 1
     self.gamma = 1
     self.signal = None
     self.state = None
-    self.n_EVs = 5
-    self.n_levels = 3
+    self.n_EVs = 54
+    self.n_levels = 10
     self._max_episode_steps = 100000
-
-    # self.observation_space = spaces.Dict({
-    #   "RemainingTime": spaces.Box(low=0, high=24, shape=(5,)),
-    #   "RemainingEnergy": spaces.Box(low=0, high=24, shape=(5,)),
-    #   "IsActivated": spaces.MultiBinary(5),
-    #   "TrackingSignal": spaces.Box(low=0, high=20, shape=(1,))
-    # })
+    self.flexibility = 0
+    self.penalty = 0
+    self.tracking_error = 0
 
 
+    # Specify the observation space
     lower_bound = np.array([0])
     upper_bound = np.array([24,70])
     low = np.append(np.tile(lower_bound, self.n_EVs * 2),lower_bound)
     high = np.append(np.tile(upper_bound, self.n_EVs),np.array([20]))
     self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
-
-    # self.action_space = spaces.Dict({
-    #   "ChargingRate": spaces.Box(low=0, high=500, shape=(5,)),
-    #   "Feedback": spaces.Box(low=0, high=500, shape=(3,))
-    # })
-
+    # Specify the action space
     upper_bound = 6
     low = np.append(np.tile(lower_bound, self.n_EVs), np.tile(lower_bound, self.n_levels))
     high = np.append(np.tile(upper_bound, self.n_EVs), np.tile(upper_bound, self.n_levels))
     self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
+    # Reset time for new episode
     self.time = 0
     self.time_interval = 0.1
     # store data
     self.data = None
 
   def step(self, action):
-    ## Update states according to a naive battery model
+    # Update states according to a naive battery model
     # Time advances
     self.time = self.time + self.time_interval
     # Check if a new EV arrives
@@ -91,30 +84,32 @@ class EVEnv(gym.Env):
             action[item] = self.state[item, 1]/self.time_interval
     self.state[:, 1] = charging_result.clip(min=0)
 
-    penalty = 0
+    self.penalty = 0
     for i in np.nonzero(self.state[:, 2])[0]:
       # The EV has no remaining time
       if self.state[i, 0] == 0:
         # The EV is overdue
         if self.state[i, 1] > 0:
-          penalty = 10 * self.gamma * self.state[i, 1]
+          self.penalty = 10 * self.gamma * self.state[i, 1]
         # Deactivate the EV and reset
         self.state[i, :] = 0
+
+      # Use soft penalty
       # else:
       #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
 
     # Update rewards
     # Set entropy zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
-        flexibility = 0
+        self.flexibility = 0
     else:
-        flexibility = self.alpha * (stats.entropy(action[-self.n_levels:])) ** 2
+        self.flexibility = self.alpha * (stats.entropy(action[-self.n_levels:])) ** 2
 
-    tracking_error = self.beta * (np.sum(action[:self.n_EVs]) - self.signal) ** 2
-    reward = (flexibility - tracking_error - penalty) / 100
+    self.tracking_error = self.beta * (np.sum(action[:self.n_EVs]) - self.signal) ** 2
+    reward = (self.flexibility - self.tracking_error - self.penalty) / 100
 
     # Select a new tracking signal
-    levels = np.linspace(0, 20, num=3)
+    levels = np.linspace(0, 20, num=self.n_levels)
     # Set signal zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
         self.signal = choices(levels)[0]
@@ -134,7 +129,7 @@ class EVEnv(gym.Env):
     data = np.load(name)
     self.data = data
     # Initialize states and time
-    self.state = np.zeros([5, 3])
+    self.state = np.zeros([self.n_EVs, 3])
     # Remaining time
     self.state[0, 0] = data[0, 1]
     # SOC
