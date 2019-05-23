@@ -22,15 +22,15 @@ from collections import deque  # Ordered collection with ends
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
-  def __init__(self):
+  def __init__(self, n_EVs = 54, n_levels = 10):
     # Parameter for reward function
     self.alpha = 5
     self.beta = 1
     self.gamma = 1
     self.signal = None
     self.state = None
-    self.n_EVs = 54
-    self.n_levels = 10
+    self.n_EVs = n_EVs
+    self.n_levels = n_levels
     self._max_episode_steps = 100000
     self.flexibility = 0
     self.penalty = 0
@@ -113,18 +113,22 @@ class EVEnv(gym.Env):
     # Set signal zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
         self.signal = choices(levels)[0]
+        action[-self.n_levels] = 1
     else:
         self.signal = choices(levels, weights=action[-self.n_levels:])[0]
+        action[-self.n_levels:] = action[-self.n_levels:] / np.sum(action[-self.n_levels:])
 
     done = True if self.time >= 24 else False
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     info = {}
-    return obs, reward, done, info
+    refined_act = action
+    return obs, reward, done, info, refined_act
 
   def reset(self):
     # Select a random day and restart
     day = random.randint(1, 59)
-    name = '/Users/tonytiny/Documents/Github/RLScheduling/real/data' + str(day) + '.npy'
+    # name = '/Users/tonytiny/Documents/Github/RLScheduling/real/data' + str(day) + '.npy'
+    name = '/Users/chenliang/Workspace/RLScheduling/real/data' + str(day) + '.npy'
     # Load data
     data = np.load(name)
     self.data = data
@@ -138,7 +142,7 @@ class EVEnv(gym.Env):
     self.state[0, 2] = 1
     # Select initial signal to be zero -- does not matter since time interval is short
     self.signal = 0
-    self.time = data[0, 0]
+    self.time = np.floor(data[0, 0]*10) / 10.0
 
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     return obs
