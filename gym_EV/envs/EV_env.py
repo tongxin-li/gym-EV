@@ -24,28 +24,30 @@ class EVEnv(gym.Env):
 
   def __init__(self):
     # Parameter for reward function
-    self.alpha = 5
+    self.alpha = 1
     self.beta = 1
     self.gamma = 1
     self.signal = None
     self.state = None
-    self.n_EVs = 54
-    self.n_levels = 10
+    self.n_EVs = 3
+    self.n_levels = 6
+    self.max_control = 6
+    self.max_rate = 6
     self._max_episode_steps = 100000
     self.flexibility = 0
     self.penalty = 0
     self.tracking_error = 0
-
+    self.avg_tracking_error = 0
 
     # Specify the observation space
     lower_bound = np.array([0])
     upper_bound = np.array([24,70])
-    low = np.append(np.tile(lower_bound, self.n_EVs * 2),lower_bound)
-    high = np.append(np.tile(upper_bound, self.n_EVs),np.array([20]))
+    low = np.append(np.tile(lower_bound, self.n_EVs * 2), lower_bound)
+    high = np.append(np.tile(upper_bound, self.n_EVs), np.array([self.max_control]))
     self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
     # Specify the action space
-    upper_bound = 6
+    upper_bound = self.max_rate
     low = np.append(np.tile(lower_bound, self.n_EVs), np.tile(lower_bound, self.n_levels))
     high = np.append(np.tile(upper_bound, self.n_EVs), np.tile(upper_bound, self.n_levels))
     self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
@@ -78,7 +80,7 @@ class EVEnv(gym.Env):
 
     # Update battery
     charging_result = self.state[:, 1] - action[:self.n_EVs] * self.time_interval
-    # Battery is full
+    # Battery is full/no EV
     for item in range(len(charging_result)):
         if charging_result[item] < 0:
             action[item] = self.state[item, 1]/self.time_interval
@@ -106,10 +108,11 @@ class EVEnv(gym.Env):
         self.flexibility = self.alpha * (stats.entropy(action[-self.n_levels:])) ** 2
 
     self.tracking_error = self.beta * (np.sum(action[:self.n_EVs]) - self.signal) ** 2
+    self.avg_tracking_error = self.tracking_error/200 + self.avg_tracking_error
     reward = (self.flexibility - self.tracking_error - self.penalty) / 100
 
     # Select a new tracking signal
-    levels = np.linspace(0, 20, num=self.n_levels)
+    levels = np.linspace(0, self.max_control, num=self.n_levels)
     # Set signal zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
         self.signal = choices(levels)[0]
@@ -123,8 +126,8 @@ class EVEnv(gym.Env):
 
   def reset(self):
     # Select a random day and restart
-    day = random.randint(1, 59)
-    name = '/Users/tonytiny/Documents/Github/RLScheduling/real/data' + str(day) + '.npy'
+    day = random.randint(1, 99)
+    name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_train/data' + str(day) + '.npy'
     # Load data
     data = np.load(name)
     self.data = data
@@ -139,6 +142,9 @@ class EVEnv(gym.Env):
     # Select initial signal to be zero -- does not matter since time interval is short
     self.signal = 0
     self.time = data[0, 0]
+
+    # Reset reward calculator
+    self.avg_tracking_error = 0
 
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     return obs
