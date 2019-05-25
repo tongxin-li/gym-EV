@@ -127,11 +127,16 @@ class EVEnv(gym.Env):
     refined_act = action
     return obs, reward, done, info, refined_act
 
-  def reset(self):
+  def reset(self, isTrain):
     # Select a random day and restart
-    day = random.randint(1, 59)
+
     # name = '/Users/tonytiny/Documents/Github/RLScheduling/real/data' + str(day) + '.npy'
-    name = '/Users/chenliang/Workspace/gym-EV_data/real/data' + str(day) + '.npy'
+    if isTrain:
+      day = random.randint(0, 99)
+      name = '/Users/chenliang/Workspace/gym-EV_data/real_train/data' + str(day) + '.npy'
+    else:
+      day = random.randint(0, 21)
+      name = '/Users/chenliang/Workspace/gym-EV_data/real_test/data' + str(day) + '.npy'
     # Load data
     data = np.load(name)
     self.data = data
