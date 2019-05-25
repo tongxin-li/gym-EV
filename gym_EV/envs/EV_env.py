@@ -22,9 +22,9 @@ from collections import deque  # Ordered collection with ends
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, n_EVs = 54, n_levels = 10):
+  def __init__(self, n_EVs = 54, n_levels = 10, max_energy = 20):
     # Parameter for reward function
-    self.alpha = 5
+    self.alpha = 0.01
     self.beta = 1
     self.gamma = 1
     self.signal = None
@@ -35,13 +35,14 @@ class EVEnv(gym.Env):
     self.flexibility = 0
     self.penalty = 0
     self.tracking_error = 0
+    self.max_energy = max_energy
 
 
     # Specify the observation space
     lower_bound = np.array([0])
     upper_bound = np.array([24,70])
     low = np.append(np.tile(lower_bound, self.n_EVs * 2),lower_bound)
-    high = np.append(np.tile(upper_bound, self.n_EVs),np.array([20]))
+    high = np.append(np.tile(upper_bound, self.n_EVs),np.array([self.max_energy]))
     self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
     # Specify the action space
@@ -109,14 +110,16 @@ class EVEnv(gym.Env):
     reward = (self.flexibility - self.tracking_error - self.penalty) / 100
 
     # Select a new tracking signal
-    levels = np.linspace(0, 20, num=self.n_levels)
+    levels = np.linspace(0, self.max_energy, num=self.n_levels)
     # Set signal zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
-        self.signal = choices(levels)[0]
-        action[-self.n_levels] = 1
+        # action[-self.n_levels] = 1
+      self.signal = choices(levels)[0]
+
     else:
-        self.signal = choices(levels, weights=action[-self.n_levels:])[0]
-        action[-self.n_levels:] = action[-self.n_levels:] / np.sum(action[-self.n_levels:])
+        # action[-self.n_levels:] = action[-self.n_levels:] / np.sum(action[-self.n_levels:])
+      self.signal = choices(levels, weights=action[-self.n_levels:])[0]
+
 
     done = True if self.time >= 24 else False
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
@@ -128,7 +131,7 @@ class EVEnv(gym.Env):
     # Select a random day and restart
     day = random.randint(1, 59)
     # name = '/Users/tonytiny/Documents/Github/RLScheduling/real/data' + str(day) + '.npy'
-    name = '/Users/chenliang/Workspace/RLScheduling/real/data' + str(day) + '.npy'
+    name = '/Users/chenliang/Workspace/gym-EV_data/real/data' + str(day) + '.npy'
     # Load data
     data = np.load(name)
     self.data = data
@@ -142,7 +145,8 @@ class EVEnv(gym.Env):
     self.state[0, 2] = 1
     # Select initial signal to be zero -- does not matter since time interval is short
     self.signal = 0
-    self.time = np.floor(data[0, 0]*10) / 10.0
+    # self.time = np.floor(data[0, 0]*10) / 10.0
+    self.time = data[0,0]
 
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     return obs
