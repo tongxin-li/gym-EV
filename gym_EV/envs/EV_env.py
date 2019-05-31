@@ -24,7 +24,7 @@ class EVEnv(gym.Env):
   def __init__(self, n_EVs=54, n_levels=10, max_energy=20):
     # Parameter for reward function
     self.alpha = 0
-    self.beta = 1
+    self.beta = 5
     self.gamma = 1
     self.signal = None
     self.state = None
@@ -36,6 +36,13 @@ class EVEnv(gym.Env):
     self.tracking_error = 0
     self.max_energy = max_energy
     self.rate = 6
+    # store previous signal for smoothing
+    self.signal_buffer = deque(maxlen=5)
+    self.smoothing = 0.5
+    # store EV charging result
+    self.charging_result = []
+    self.initial_bat = []
+    self.dic_bat = {}
 
     # Specify the observation space
     lower_bound = np.array([0])
@@ -68,9 +75,11 @@ class EVEnv(gym.Env):
           continue
         # Add a new active charging station
         else:
-          self.state[np.where(self.state[:, 2] == 0)[0][0], 0] = self.data[i, 1]
-          self.state[np.where(self.state[:, 2] == 0)[0][0], 1] = self.data[i, 2]
-          self.state[np.where(self.state[:, 2] == 0)[0][0], 2] = 1
+          idx = np.where(self.state[:, 2] == 0)[0][0]
+          self.state[idx, 0] = self.data[i, 1]
+          self.state[idx, 1] = self.data[i, 2]
+          self.state[idx, 2] = 1
+          self.dic_bat[idx] = self.data[i, 2]
 
     # Update remaining time
     time_result = self.state[:, 0] - self.time_interval
@@ -89,6 +98,8 @@ class EVEnv(gym.Env):
       # The EV has no remaining time
       if self.state[i, 0] == 0:
         # The EV is overdue
+        self.charging_result.append(self.state[i,1])
+        self.initial_bat.append(self.dic_bat[i])
         if self.state[i, 1] > 0:
           self.penalty = 10 * self.gamma * self.state[i, 1]
         # Deactivate the EV and reset
@@ -97,6 +108,21 @@ class EVEnv(gym.Env):
       # Use soft penalty
       # else:
       #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
+
+    # Select a new tracking signal
+    levels = np.linspace(0, self.max_energy, num=self.n_levels)
+    # Set signal zero if feedback is allzero
+    if not np.any(action[-self.n_levels:]):
+      action[-self.n_levels] = 1
+      tmp_signal = 0
+      # self.signal = choices(levels, weights=action[-self.n_levels:])[0]
+      # self.signal = levels[np.argmax(action[-self.n_levels:])]
+    else:
+      action[-self.n_levels:] = action[-self.n_levels:] / np.sum(action[-self.n_levels:])
+      tmp_signal = choices(levels, weights=action[-self.n_levels:])[0]
+      # self.signal = levels[np.argmax(action[-self.n_levels:])]
+    self.signal = self.smoothing * np.mean(self.signal_buffer) + (1-self.smoothing) * tmp_signal
+    self.signal_buffer.append(self.signal)
 
     # Update rewards
     # Set entropy zero if feedback is allzero
@@ -107,17 +133,6 @@ class EVEnv(gym.Env):
 
     self.tracking_error = self.beta * (np.sum(action[:self.n_EVs]) - self.signal) ** 2
     reward = (self.flexibility - self.tracking_error - self.penalty) / 100
-
-    # Select a new tracking signal
-    levels = np.linspace(0, self.max_energy, num=self.n_levels)
-    # Set signal zero if feedback is allzero
-    if not np.any(action[-self.n_levels:]):
-      action[-self.n_levels] = 1
-      self.signal = choices(levels, weights=action[-self.n_levels:])[0]
-
-    else:
-      # action[-self.n_levels:] = action[-self.n_levels:] / np.sum(action[-self.n_levels:])
-      self.signal = choices(levels, weights=action[-self.n_levels:])[0]
 
     done = True if self.time >= 24 else False
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
@@ -150,6 +165,14 @@ class EVEnv(gym.Env):
     self.signal = 0
     # self.time = np.floor(data[0, 0]*10) / 10.0
     self.time = data[0, 0]
+    # signal buffer
+    self.signal_buffer.clear()
+    self.signal_buffer.append(self.signal)
+    self.charging_result = []
+    self.initial_bat = []
+    self.dic_bat = {}
+    self.dic_bat[0] = self.data[0, 2]
+
 
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     return obs
