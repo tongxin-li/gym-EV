@@ -18,13 +18,12 @@ from random import choices
 from collections import deque  # Ordered collection with ends
 
 
-
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, n_EVs = 54, n_levels = 10, max_energy = 20):
+  def __init__(self, n_EVs=54, n_levels=10, max_energy=20):
     # Parameter for reward function
-    self.alpha = 0.01
+    self.alpha = 0
     self.beta = 1
     self.gamma = 1
     self.signal = None
@@ -36,17 +35,17 @@ class EVEnv(gym.Env):
     self.penalty = 0
     self.tracking_error = 0
     self.max_energy = max_energy
-
+    self.rate = 6
 
     # Specify the observation space
     lower_bound = np.array([0])
-    upper_bound = np.array([24,70])
-    low = np.append(np.tile(lower_bound, self.n_EVs * 2),lower_bound)
-    high = np.append(np.tile(upper_bound, self.n_EVs),np.array([self.max_energy]))
+    upper_bound = np.array([24, 70])
+    low = np.append(np.tile(lower_bound, self.n_EVs * 2), lower_bound)
+    high = np.append(np.tile(upper_bound, self.n_EVs), np.array([self.max_energy]))
     self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
     # Specify the action space
-    upper_bound = 6
+    upper_bound = self.rate
     low = np.append(np.tile(lower_bound, self.n_EVs), np.tile(lower_bound, self.n_levels))
     high = np.append(np.tile(upper_bound, self.n_EVs), np.tile(upper_bound, self.n_levels))
     self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
@@ -66,12 +65,12 @@ class EVEnv(gym.Env):
       if self.data[i, 0] > self.time - self.time_interval and self.data[i, 0] <= self.time:
         # Reject if all spots are full
         if np.where(self.state[:, 2] == 0)[0].size == 0:
-            continue
+          continue
         # Add a new active charging station
         else:
-            self.state[np.where(self.state[:, 2] == 0)[0][0], 0] = self.data[i, 1]
-            self.state[np.where(self.state[:, 2] == 0)[0][0], 1] = self.data[i, 2]
-            self.state[np.where(self.state[:, 2] == 0)[0][0], 2] = 1
+          self.state[np.where(self.state[:, 2] == 0)[0][0], 0] = self.data[i, 1]
+          self.state[np.where(self.state[:, 2] == 0)[0][0], 1] = self.data[i, 2]
+          self.state[np.where(self.state[:, 2] == 0)[0][0], 2] = 1
 
     # Update remaining time
     time_result = self.state[:, 0] - self.time_interval
@@ -81,8 +80,8 @@ class EVEnv(gym.Env):
     charging_result = self.state[:, 1] - action[:self.n_EVs] * self.time_interval
     # Battery is full
     for item in range(len(charging_result)):
-        if charging_result[item] < 0:
-            action[item] = self.state[item, 1]/self.time_interval
+      if charging_result[item] < 0:
+        action[item] = self.state[item, 1] / self.time_interval
     self.state[:, 1] = charging_result.clip(min=0)
 
     self.penalty = 0
@@ -102,9 +101,9 @@ class EVEnv(gym.Env):
     # Update rewards
     # Set entropy zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
-        self.flexibility = 0
+      self.flexibility = 0
     else:
-        self.flexibility = self.alpha * (stats.entropy(action[-self.n_levels:])) ** 2
+      self.flexibility = self.alpha * (stats.entropy(action[-self.n_levels:])) ** 2
 
     self.tracking_error = self.beta * (np.sum(action[:self.n_EVs]) - self.signal) ** 2
     reward = (self.flexibility - self.tracking_error - self.penalty) / 100
@@ -113,13 +112,12 @@ class EVEnv(gym.Env):
     levels = np.linspace(0, self.max_energy, num=self.n_levels)
     # Set signal zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
-        # action[-self.n_levels] = 1
-      self.signal = choices(levels)[0]
-
-    else:
-        # action[-self.n_levels:] = action[-self.n_levels:] / np.sum(action[-self.n_levels:])
+      action[-self.n_levels] = 1
       self.signal = choices(levels, weights=action[-self.n_levels:])[0]
 
+    else:
+      # action[-self.n_levels:] = action[-self.n_levels:] / np.sum(action[-self.n_levels:])
+      self.signal = choices(levels, weights=action[-self.n_levels:])[0]
 
     done = True if self.time >= 24 else False
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
@@ -151,10 +149,7 @@ class EVEnv(gym.Env):
     # Select initial signal to be zero -- does not matter since time interval is short
     self.signal = 0
     # self.time = np.floor(data[0, 0]*10) / 10.0
-    self.time = data[0,0]
+    self.time = data[0, 0]
 
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     return obs
-
-
-
