@@ -25,7 +25,7 @@ class EVEnv(gym.Env):
   def __init__(self):
     # Parameter for reward function
     self.alpha = 1
-    self.beta = 1
+    self.beta = 5
     self.gamma = 1
     self.signal = None
     self.state = None
@@ -115,7 +115,7 @@ class EVEnv(gym.Env):
     levels = np.linspace(0, self.max_control, num=self.n_levels)
     # Set signal zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
-        self.signal = choices(levels)[0]
+        self.signal = 0
     else:
         self.signal = choices(levels, weights=action[-self.n_levels:])[0]
 
