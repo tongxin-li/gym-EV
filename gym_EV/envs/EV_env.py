@@ -81,6 +81,11 @@ class EVEnv(gym.Env):
           self.state[idx, 2] = 1
           self.dic_bat[idx] = self.data[i, 2]
 
+    # Restrict action
+    action[np.where(self.state[:,2] == 0)[0]] = 0
+    if np.sum(action[:self.n_EVs]) > self.max_energy:
+      action[:self.n_EVs] = 1.0 * action[:self.n_EVs] * self.max_energy / np.sum(action[:self.n_EVs])
+
     # Update remaining time
     time_result = self.state[:, 0] - self.time_interval
     self.state[:, 0] = time_result.clip(min=0)
