@@ -113,7 +113,6 @@ class EVEnv(gym.Env):
     # Set signal zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
       self.signal = 0
-
     else:
       self.signal = choices(levels, weights=action[-self.n_levels:])[0]
 
