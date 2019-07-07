@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import stats
 import math
-
+from decimal import Decimal
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
@@ -21,45 +21,60 @@ from collections import deque  # Ordered collection with ends
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, n_EVs=54, n_levels=10, max_energy=20):
+  def __init__(self, max_ev=54, number_level=10, max_capacity=20,  max_rate=6.6):
     # Parameter for reward function
-    self.alpha = 0
-    self.beta = 5
-    self.gamma = 1
+    self.alpha = 1
+    self.beta = 0
+    self.gamma = 0
+    self.data = None
     self.signal = None
     self.state = None
-    self.n_EVs = n_EVs
-    self.n_levels = n_levels
+    self.max_ev = max_ev
+    self.number_level = number_level
     self._max_episode_steps = 100000
     self.flexibility = 0
+    self.total_flexibility = 0
     self.penalty = 0
     self.tracking_error = 0
-    self.max_energy = max_energy
-    self.max_rate = 6
+    self.max_capacity = max_capacity
+    self.max_rate = max_rate
+    # store previous signal for smoothing
+    self.signal_buffer = deque(maxlen=5)
+    self.smoothing = 0.1
+    # store EV charging result
+    self.charging_result = []
+    self.initial_bat = []
+    self.dic_bat = {}
 
     # Specify the observation space
     lower_bound = np.array([0])
     upper_bound = np.array([24, 70])
-    low = np.append(np.tile(lower_bound, self.n_EVs * 2), lower_bound)
-    high = np.append(np.tile(upper_bound, self.n_EVs), np.array([self.max_energy]))
+    low = np.append(np.tile(lower_bound, self.max_ev * 2), lower_bound)
+    high = np.append(np.tile(upper_bound, self.max_ev), np.array([self.max_capacity]))
     self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
     # Specify the action space
     upper_bound = self.max_rate
-    low = np.append(np.tile(lower_bound, self.n_EVs), np.tile(lower_bound, self.n_levels))
-    high = np.append(np.tile(upper_bound, self.n_EVs), np.tile(upper_bound, self.n_levels))
+    low = np.append(np.tile(lower_bound, self.max_ev), np.tile(lower_bound, self.number_level))
+    high = np.append(np.tile(upper_bound, self.max_ev), np.tile(upper_bound, self.number_level))
     self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
     # Reset time for new episode
+    # Time unit is measured in Hr
     self.time = 0
     self.time_interval = 0.1
+    # This decides the granuality of control
+    self.control_steps = 1
+    self.mark = 0
     # store data
     self.data = None
 
   def step(self, action):
+
     # Update states according to a naive battery model
     # Time advances
     self.time = self.time + self.time_interval
+    self.mark = self.mark +1
     # Check if a new EV arrives
     for i in range(len(self.data)):
       if self.data[i, 0] > self.time - self.time_interval and self.data[i, 0] <= self.time:
@@ -68,27 +83,37 @@ class EVEnv(gym.Env):
           continue
         # Add a new active charging station
         else:
-          self.state[np.where(self.state[:, 2] == 0)[0][0], 0] = self.data[i, 1]
-          self.state[np.where(self.state[:, 2] == 0)[0][0], 1] = self.data[i, 2]
-          self.state[np.where(self.state[:, 2] == 0)[0][0], 2] = 1
+          idx = np.where(self.state[:, 2] == 0)[0][0]
+          self.state[idx, 0] = self.data[i, 1]
+          self.state[idx, 1] = self.data[i, 2]
+          self.state[idx, 2] = 1
+          self.dic_bat[idx] = self.data[i, 2]
+
+    # Project action
+    action[np.where(self.state[:,2] == 0)[0]] = 0
+    if np.sum(action[:self.max_ev]) > self.max_capacity:
+      action[:self.max_ev] = 1.0 * action[:self.max_ev] * self.max_capacity / np.sum(action[:self.max_ev])
 
     # Update remaining time
     time_result = self.state[:, 0] - self.time_interval
     self.state[:, 0] = time_result.clip(min=0)
 
     # Update battery
-    charging_result = self.state[:, 1] - action[:self.n_EVs] * self.time_interval
+    charging_state = self.state[:, 1] - action[:self.max_ev] * self.time_interval
+
     # Battery is full
-    for item in range(len(charging_result)):
-      if charging_result[item] < 0:
+    for item in range(len(charging_state)):
+      if charging_state[item] < 0:
         action[item] = self.state[item, 1] / self.time_interval
-    self.state[:, 1] = charging_result.clip(min=0)
+    self.state[:, 1] = charging_state.clip(min=0)
 
     self.penalty = 0
     for i in np.nonzero(self.state[:, 2])[0]:
       # The EV has no remaining time
       if self.state[i, 0] == 0:
         # The EV is overdue
+        self.charging_result = np.append(self.charging_result, self.state[i,1])
+        self.initial_bat.append(self.dic_bat[i])
         if self.state[i, 1] > 0:
           self.penalty = 10 * self.gamma * self.state[i, 1]
         # Deactivate the EV and reset
@@ -98,53 +123,73 @@ class EVEnv(gym.Env):
       # else:
       #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
 
+    # Select a new tracking signal
+    if self.mark == self.control_steps:
+      self.mark = 0
+      levels = np.linspace(0, self.max_capacity, num=self.number_level)
+      # Set signal zero if feedback is allzero
+      if not np.any(action[-self.number_level:]):
+        action[-self.number_level] = 1
+        tmp_signal = 0
+      else:
+        tmp_signal = choices(levels, weights=action[-self.number_level:])[0]
+        # self.signal = levels[np.argmax(action[-self.number_level:])]
+      self.signal = self.smoothing * np.mean(self.signal_buffer) + (1-self.smoothing) * tmp_signal
+      self.signal_buffer.append(self.signal)
+
     # Update rewards
     # Set entropy zero if feedback is allzero
-    if not np.any(action[-self.n_levels:]):
+    if not np.any(action[-self.number_level:]):
       self.flexibility = 0
     else:
-      self.flexibility = self.alpha * (stats.entropy(action[-self.n_levels:])) ** 2
-
-    self.tracking_error = self.beta * (np.sum(action[:self.n_EVs]) - self.signal) ** 2
-    reward = (self.flexibility - self.tracking_error - self.penalty) / 100
-
-    # Select a new tracking signal
-    levels = np.linspace(0, self.max_energy, num=self.n_levels)
-    # Set signal zero if feedback is allzero
-    if not np.any(action[-self.n_levels:]):
-      self.signal = 0
-    else:
-      self.signal = choices(levels, weights=action[-self.n_levels:])[0]
-
+      self.flexibility = self.alpha * stats.entropy(action[-self.number_level:])
+      self.total_flexibility = self.total_flexibility + self.flexibility
+    # Compute tracking error
+    self.tracking_error = self.beta * (np.sum(action[:self.max_ev]) - self.signal) ** 2
+    reward = (self.flexibility - self.tracking_error - self.penalty)
+    # Return obs and rewards
     done = True if self.time >= 24 else False
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     info = {}
     refined_act = action
     return obs, reward, done, info, refined_act
 
-  def reset(self, isTrain):
-    # Select a random day and restart
+  def sample_episode(self, isTrain):
+    # Sample depends on Train/Test
     if isTrain:
       day = random.randint(0, 99)
       name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_train/data' + str(day) + '.npy'
     else:
       day = random.randint(0, 21)
       name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_test/data' + str(day) + '.npy'
-    # Load data
+      # Load data
     data = np.load(name)
-    self.data = data
+    return day, data
+
+  def reset(self, isTrain):
+    # Select a random day and restart
+    _, self.data = self.sample_episode(isTrain)
     # Initialize states and time
-    self.state = np.zeros([self.n_EVs, 3])
+    self.state = np.zeros([self.max_ev, 3])
     # Remaining time
-    self.state[0, 0] = data[0, 1]
+    self.state[0, 0] = self.data[0, 1]
     # SOC
-    self.state[0, 1] = data[0, 2]
+    self.state[0, 1] = self.data[0, 2]
     # The charging station is activated
     self.state[0, 2] = 1
-    # Select initial signal to be zero -- does not matter since time interval is short
+    # Select initial signal randomly -- does not matter since time interval is short
+    # levels = np.linspace(0, self.max_capacity, num=self.number_level)
+    # self.signal = choices(levels)[0]
+    # Select initial signal as 0
     self.signal = 0
     # self.time = np.floor(data[0, 0]*10) / 10.0
-    self.time = data[0, 0]
-
+    self.time = self.data[0, 0]
+    # signal buffer
+    self.signal_buffer.clear()
+    self.signal_buffer.append(self.signal)
+    self.charging_result = []
+    self.initial_bat = []
+    self.dic_bat = {}
+    self.dic_bat[0] = self.data[0, 2]
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     return obs
