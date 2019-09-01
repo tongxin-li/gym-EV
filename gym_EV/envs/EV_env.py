@@ -40,11 +40,12 @@ class EVEnv(gym.Env):
     self.max_rate = max_rate
     # store previous signal for smoothing
     self.signal_buffer = deque(maxlen=5)
-    self.smoothing = 0.1
+    self.smoothing = 0.01
     # store EV charging result
     self.charging_result = []
     self.initial_bat = []
     self.dic_bat = {}
+    self.day = None
 
     # Specify the observation space
     lower_bound = np.array([0])
@@ -62,7 +63,7 @@ class EVEnv(gym.Env):
     # Reset time for new episode
     # Time unit is measured in Hr
     self.time = 0
-    self.time_interval = 0.1
+    self.time_interval = 0.02
     # This decides the granuality of control
     self.control_steps = 1
     self.mark = 0
@@ -128,21 +129,23 @@ class EVEnv(gym.Env):
       self.mark = 0
       levels = np.linspace(0, self.max_capacity, num=self.number_level)
       # Set signal zero if feedback is allzero
-      if not np.any(action[-self.number_level:]):
-        action[-self.number_level] = 1
+      if not np.any(action[self.max_ev:]):
+        action[self.max_ev] = 1
         tmp_signal = 0
       else:
-        tmp_signal = choices(levels, weights=action[-self.number_level:])[0]
-        # self.signal = levels[np.argmax(action[-self.number_level:])]
+        # Soft-selection
+        tmp_signal = choices(levels, weights=action[self.max_ev:])[0]
+        # Hard-selection
+        # tmp_signal = levels[np.argmax(action[self.max_ev:])]
       self.signal = self.smoothing * np.mean(self.signal_buffer) + (1-self.smoothing) * tmp_signal
       self.signal_buffer.append(self.signal)
 
     # Update rewards
     # Set entropy zero if feedback is allzero
-    if not np.any(action[-self.number_level:]):
+    if not np.any(action[self.max_ev:]):
       self.flexibility = 0
     else:
-      self.flexibility = self.alpha * stats.entropy(action[-self.number_level:])
+      self.flexibility = self.alpha * stats.entropy(action[self.max_ev:])
       self.total_flexibility = self.total_flexibility + self.flexibility
     # Compute tracking error
     self.tracking_error = self.beta * (np.sum(action[:self.max_ev]) - self.signal) ** 2
@@ -157,18 +160,33 @@ class EVEnv(gym.Env):
   def sample_episode(self, isTrain):
     # Sample depends on Train/Test
     if isTrain:
-      day = random.randint(0, 99)
-      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_train/data' + str(day) + '.npy'
+      self.day = random.randint(0, 99)
+      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_train/data' + str(self.day) + '.npy'
     else:
-      day = random.randint(0, 21)
-      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_test/data' + str(day) + '.npy'
+      self.day = random.randint(0, 21)
+      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_test/data' + str(self.day) + '.npy'
       # Load data
     data = np.load(name)
-    return day, data
+    return self.day, data
 
-  def reset(self, isTrain):
+  def get_episode_by_time(self, day):
+    self.day = day
+    if day <= 99:
+      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_train/data' + str(self.day) + '.npy'
+      self.day = random.randint(0, 21)
+    else:
+      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_test/data' + str(self.day) + '.npy'
+    # Load data
+    data = np.load(name)
+    return self.day, data
+
+  def reset(self, isTrain, day):
     # Select a random day and restart
-    _, self.data = self.sample_episode(isTrain)
+    # _, self.data = self.sample_episode(isTrain)
+
+    # Select day in an chronological order
+    _, self.data = self.sample_episode(day)
+
     # Initialize states and time
     self.state = np.zeros([self.max_ev, 3])
     # Remaining time
