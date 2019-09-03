@@ -24,8 +24,8 @@ class EVEnv(gym.Env):
   def __init__(self, max_ev=54, number_level=10, max_capacity=20,  max_rate=6.6):
     # Parameter for reward function
     self.alpha = 1
-    self.beta = 0
-    self.gamma = 0
+    self.beta = 1
+    self.gamma = 1
     self.data = None
     self.signal = None
     self.state = None
@@ -171,11 +171,7 @@ class EVEnv(gym.Env):
 
   def get_episode_by_time(self, day):
     self.day = day
-    if day <= 99:
-      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_train/data' + str(self.day) + '.npy'
-      self.day = random.randint(0, 21)
-    else:
-      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_test/data' + str(self.day) + '.npy'
+    name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
     # Load data
     data = np.load(name)
     return self.day, data
@@ -185,7 +181,19 @@ class EVEnv(gym.Env):
     # _, self.data = self.sample_episode(isTrain)
 
     # Select day in an chronological order
-    _, self.data = self.sample_episode(day)
+    _, self.data = self.get_episode_by_time(day)
+
+    # Reset values
+    self.signal = None
+    self.state = None
+    self.flexibility = 0
+    self.total_flexibility = 0
+    self.penalty = 0
+    self.tracking_error = 0
+    self.charging_result = []
+    self.initial_bat = []
+    self.dic_bat = {}
+    self.day = day
 
     # Initialize states and time
     self.state = np.zeros([self.max_ev, 3])
