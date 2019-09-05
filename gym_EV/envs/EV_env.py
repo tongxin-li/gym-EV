@@ -40,7 +40,7 @@ class EVEnv(gym.Env):
     self.max_rate = max_rate
     # store previous signal for smoothing
     self.signal_buffer = deque(maxlen=5)
-    self.smoothing = 0.01
+    self.smoothing = 0
     # store EV charging result
     self.charging_result = []
     self.initial_bat = []
@@ -63,7 +63,7 @@ class EVEnv(gym.Env):
     # Reset time for new episode
     # Time unit is measured in Hr
     self.time = 0
-    self.time_interval = 0.02
+    self.time_interval = 0.1
     # This decides the granuality of control
     self.control_steps = 1
     self.mark = 0
@@ -116,7 +116,7 @@ class EVEnv(gym.Env):
         self.charging_result = np.append(self.charging_result, self.state[i,1])
         self.initial_bat.append(self.dic_bat[i])
         if self.state[i, 1] > 0:
-          self.penalty = 10 * self.gamma * self.state[i, 1]
+          self.penalty = self.gamma * self.state[i, 1]
         # Deactivate the EV and reset
         self.state[i, :] = 0
 
@@ -182,6 +182,11 @@ class EVEnv(gym.Env):
 
     # Select day in an chronological order
     _, self.data = self.get_episode_by_time(day)
+    done = 0
+    if len(self.data) == 0:
+      done = 1
+      obs = []
+      return obs, done
 
     # Reset values
     self.signal = None
@@ -218,4 +223,4 @@ class EVEnv(gym.Env):
     self.dic_bat = {}
     self.dic_bat[0] = self.data[0, 2]
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
-    return obs
+    return obs, done
