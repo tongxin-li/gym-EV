@@ -171,8 +171,8 @@ class EVEnv(gym.Env):
 
   def get_episode_by_time(self, day):
     self.day = day
-    # name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
-    name = '/Users/tonytiny/Documents/Github/gym-EV_data/fake/data' + str(self.day) + '.npy'
+    name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
+    # name = '/Users/tonytiny/Documents/Github/gym-EV_data/fake/data' + str(self.day) + '.npy'
     # Load data
     data = np.load(name)
     return self.day, data
@@ -202,20 +202,24 @@ class EVEnv(gym.Env):
     self.day = day
 
     # Initialize states and time
+
     self.state = np.zeros([self.max_ev, 3])
-    # Remaining time
-    self.state[0, 0] = self.data[0, 1]
-    # SOC
-    self.state[0, 1] = self.data[0, 2]
-    # The charging station is activated
-    self.state[0, 2] = 1
+    # # Remaining time
+    # self.state[0, 0] = self.data[0, 1]
+    # # SOC
+    # self.state[0, 1] = self.data[0, 2]
+    # # The charging station is activated
+    # self.state[0, 2] = 1
+
+    # Start from 0 for better visualization
+    # self.time = self.data[0, 0]
+    self.time = 0
+
     # Select initial signal randomly -- does not matter since time interval is short
     # levels = np.linspace(0, self.max_capacity, num=self.number_level)
     # self.signal = choices(levels)[0]
     # Select initial signal as 0
     self.signal = 0
-    # self.time = np.floor(data[0, 0]*10) / 10.0
-    self.time = self.data[0, 0]
     # signal buffer
     self.signal_buffer.clear()
     self.signal_buffer.append(self.signal)
