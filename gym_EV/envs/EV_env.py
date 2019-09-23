@@ -171,7 +171,8 @@ class EVEnv(gym.Env):
 
   def get_episode_by_time(self, day):
     self.day = day
-    name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
+    # name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
+    name = '/Users/tonytiny/Documents/Github/gym-EV_data/fake/data' + str(self.day) + '.npy'
     # Load data
     data = np.load(name)
     return self.day, data
