@@ -29,6 +29,7 @@ class EVEnv(gym.Env):
     self.data = None
     self.signal = None
     self.state = None
+    self.peak_power = 20
     self.max_ev = max_ev
     self.number_level = number_level
     self._max_episode_steps = 100000
@@ -40,7 +41,7 @@ class EVEnv(gym.Env):
     self.max_rate = max_rate
     # store previous signal for smoothing
     self.signal_buffer = deque(maxlen=5)
-    self.smoothing = 0
+    self.smoothing = 0.0
     # store EV charging result
     self.charging_result = []
     self.initial_bat = []
@@ -125,27 +126,34 @@ class EVEnv(gym.Env):
       #   penalty = self.gamma * self.state[0, 1] / self.state[i, 0]
 
     # Select a new tracking signal
+
+    # Operational constraints: Peak Power Bound (PPB):
+    action_controlling = action[self.max_ev:]
+    # for i in range(len(action_controlling)):
+    #   if i > self.peak_power:
+    #     action_controlling[i] = 0
+
     if self.mark == self.control_steps:
       self.mark = 0
       levels = np.linspace(0, self.max_capacity, num=self.number_level)
       # Set signal zero if feedback is allzero
-      if not np.any(action[self.max_ev:]):
+      if not np.any(action_controlling):
         action[self.max_ev] = 1
         tmp_signal = 0
       else:
         # Soft-selection
-        tmp_signal = choices(levels, weights=action[self.max_ev:])[0]
+        tmp_signal = choices(levels, weights=action_controlling)[0]
         # Hard-selection
-        # tmp_signal = levels[np.argmax(action[self.max_ev:])]
+        # tmp_signal = levels[np.argmax(action_controlling)]
       self.signal = self.smoothing * np.mean(self.signal_buffer) + (1-self.smoothing) * tmp_signal
       self.signal_buffer.append(self.signal)
 
     # Update rewards
     # Set entropy zero if feedback is allzero
-    if not np.any(action[self.max_ev:]):
+    if not np.any(action_controlling):
       self.flexibility = 0
     else:
-      self.flexibility = self.alpha * stats.entropy(action[self.max_ev:])
+      self.flexibility = self.alpha * stats.entropy(action_controlling)
       self.total_flexibility = self.total_flexibility + self.flexibility
     # Compute tracking error
     self.tracking_error = self.beta * (np.sum(action[:self.max_ev]) - self.signal) ** 2
@@ -171,8 +179,9 @@ class EVEnv(gym.Env):
 
   def get_episode_by_time(self, day):
     self.day = day
-    name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
+    # name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
     # name = '/Users/tonytiny/Documents/Github/gym-EV_data/fake/data' + str(self.day) + '.npy'
+    name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy_jpl/data' + str(self.day) + '.npy'
     # Load data
     data = np.load(name)
     return self.day, data
