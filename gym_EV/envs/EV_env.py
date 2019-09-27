@@ -29,7 +29,7 @@ class EVEnv(gym.Env):
     self.data = None
     self.signal = None
     self.state = None
-    self.peak_power = 20
+    self.peak_power = 50
     self.max_ev = max_ev
     self.number_level = number_level
     self._max_episode_steps = 100000
@@ -179,6 +179,7 @@ class EVEnv(gym.Env):
 
   def get_episode_by_time(self, day):
     self.day = day
+    # name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_one/data' + str(self.day) + '.npy'
     # name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
     # name = '/Users/tonytiny/Documents/Github/gym-EV_data/fake/data' + str(self.day) + '.npy'
     name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy_jpl/data' + str(self.day) + '.npy'
