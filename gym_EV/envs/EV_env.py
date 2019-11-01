@@ -17,6 +17,9 @@ import random  # Handling random number generation
 from random import choices
 from collections import deque  # Ordered collection with ends
 
+""""
+We define a simple EV charging enviroment for aggregate flexibility characterization
+"""
 
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
