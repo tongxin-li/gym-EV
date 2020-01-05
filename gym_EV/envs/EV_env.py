@@ -18,7 +18,9 @@ from random import choices
 from collections import deque  # Ordered collection with ends
 
 """"
-We define a simple EV charging enviroment for aggregate flexibility characterization
+Version: AG-v0.0
+We define a simple EV charging environment for aggregate flexibility characterization. 
+The power signal is sampled according to the feedback and the operational constraints (peak power limit).
 """
 
 class EVEnv(gym.Env):
@@ -168,17 +170,17 @@ class EVEnv(gym.Env):
     refined_act = action
     return obs, reward, done, info, refined_act
 
-  def sample_episode(self, isTrain):
-    # Sample depends on Train/Test
-    if isTrain:
-      self.day = random.randint(0, 99)
-      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_train/data' + str(self.day) + '.npy'
-    else:
-      self.day = random.randint(0, 21)
-      name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_test/data' + str(self.day) + '.npy'
-      # Load data
-    data = np.load(name)
-    return self.day, data
+  # def sample_episode(self, isTrain):
+  #   # Sample depends on Train/Test
+  #   if isTrain:
+  #     self.day = random.randint(0, 99)
+  #     name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_train/data' + str(self.day) + '.npy'
+  #   else:
+  #     self.day = random.randint(0, 21)
+  #     name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_test/data' + str(self.day) + '.npy'
+  #     # Load data
+  #   data = np.load(name)
+  #   return self.day, data
 
   def get_episode_by_time(self, day):
     self.day = day
