@@ -21,16 +21,21 @@ from collections import deque  # Ordered collection with ends
 Version: AG-v0.0
 We define a simple EV charging environment for aggregate flexibility characterization. 
 The power signal is sampled according to the feedback and the operational constraints (peak power limit).
+
+Update: AG-v0.1
+Adding a component for online cost minimization
 """
 
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, max_ev=54, number_level=10, max_capacity=20,  max_rate=6.6):
+  def __init__(self, max_ev=54, number_level=10, max_capacity=20,  max_rate=6.6, tuning=50):
     # Parameter for reward function
     self.alpha = 1
     self.beta = 1
     self.gamma = 1
+    self.xi = 2
+
     self.data = None
     self.signal = None
     self.state = None
@@ -52,6 +57,15 @@ class EVEnv(gym.Env):
     self.initial_bat = []
     self.dic_bat = {}
     self.day = None
+    self.selection = "Random"
+    self.price = []
+    self.cost = 0
+    self.power = 0
+    self.tuning_parameter = tuning
+    self.total_flexibility = 0
+    self.total_charging_error = 0
+    self.total_tracking_error = 0
+    self.total_reward = 0
 
     # Specify the observation space
     lower_bound = np.array([0])
@@ -69,12 +83,31 @@ class EVEnv(gym.Env):
     # Reset time for new episode
     # Time unit is measured in Hr
     self.time = 0
-    self.time_interval = 0.1
+    self.time_interval = 0.05
     # This decides the granuality of control
     self.control_steps = 1
     self.mark = 0
     # store data
     self.data = None
+
+  def select_signal(self, flexibility_feedback, current_price):
+
+    signal = 0
+    levels = np.linspace(0, self.max_capacity, num=self.number_level)
+    if not np.any(flexibility_feedback):
+      flexibility_feedback[0] = 1
+    flexibility_feedback = flexibility_feedback / sum(flexibility_feedback)
+    objective_temp = 1000000
+    for label in range(len(flexibility_feedback)):
+      if flexibility_feedback[label] > 0.01:
+        objective = current_price * levels[label] - self.tuning_parameter * math.log(flexibility_feedback[label])
+        # objective = current_price * levels[label]
+        if objective < objective_temp:
+          signal = levels[label]
+          objective_temp = objective
+    # print(objective)
+    # print(math.log(flexibility_feedback[label]))
+    return signal
 
   def step(self, action):
 
@@ -82,6 +115,8 @@ class EVEnv(gym.Env):
     # Time advances
     self.time = self.time + self.time_interval
     self.mark = self.mark +1
+    # Price updates
+    self.price = np.append(self.price, self.time / 24)
     # Check if a new EV arrives
     for i in range(len(self.data)):
       if self.data[i, 0] > self.time - self.time_interval and self.data[i, 0] <= self.time:
@@ -114,6 +149,8 @@ class EVEnv(gym.Env):
         action[item] = self.state[item, 1] / self.time_interval
     self.state[:, 1] = charging_state.clip(min=0)
 
+
+
     self.penalty = 0
     for i in np.nonzero(self.state[:, 2])[0]:
       # The EV has no remaining time
@@ -134,26 +171,44 @@ class EVEnv(gym.Env):
 
     # Operational constraints: Peak Power Bound (PPB):
     action_controlling = action[self.max_ev:]
+
     # for i in range(len(action_controlling)):
     #   if i > self.peak_power:
     #     action_controlling[i] = 0
 
     if self.mark == self.control_steps:
       self.mark = 0
-      levels = np.linspace(0, self.max_capacity, num=self.number_level)
-      # Set signal zero if feedback is allzero
-      if not np.any(action_controlling):
-        action[self.max_ev] = 1
-        tmp_signal = 0
-      else:
-        # Soft-selection
-        tmp_signal = choices(levels, weights=action_controlling)[0]
-        # Hard-selection
-        # tmp_signal = levels[np.argmax(action_controlling)]
+
+      if self.selection == "Optimization":
+
+        tmp_signal = self.select_signal(action_controlling, self.price[-1])
+
+      if self.selection == "Random":
+
+        levels = np.linspace(0, self.max_capacity, num=self.number_level)
+
+        # Set signal zero if feedback is all-zero
+        if not np.any(action):
+          action_controlling[0] = 1
+          tmp_signal = 0
+        else:
+          # normalize flexibility feedback
+          action = action / np.sum(action[-self.number_level:])
+          # Soft-selection
+          tmp_signal = choices(levels, weights=action_controlling)[0]
+          # Hard-selection
+          # tmp_signal = levels[np.argmax(action_controlling)]
+
       self.signal = self.smoothing * np.mean(self.signal_buffer) + (1-self.smoothing) * tmp_signal
       self.signal_buffer.append(self.signal)
 
     # Update rewards
+
+    # Compute costs
+    self.power = np.sum(action[:self.max_ev])
+    temp_cost = self.xi * self.power * self.price[-1]
+    self.cost = self.cost + temp_cost
+
     # Set entropy zero if feedback is allzero
     if not np.any(action_controlling):
       self.flexibility = 0
@@ -187,12 +242,13 @@ class EVEnv(gym.Env):
     # name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_one/data' + str(self.day) + '.npy'
     # name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy/data' + str(self.day) + '.npy'
     # name = '/Users/tonytiny/Documents/Github/gym-EV_data/fake/data' + str(self.day) + '.npy'
-    name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy_jpl/data' + str(self.day) + '.npy'
+    # name = '/Users/tonytiny/Documents/Github/gym-EV_data/real_greedy_jpl/data' + str(self.day) + '.npy'
+    name = '/Users/tonytiny/Documents/Github/gym-EV_data/selected_day/data' + str(self.day) + '.npy'
     # Load data
     data = np.load(name)
     return self.day, data
 
-  def reset(self, isTrain, day):
+  def reset(self, day):
     # Select a random day and restart
     # _, self.data = self.sample_episode(isTrain)
 
@@ -235,12 +291,27 @@ class EVEnv(gym.Env):
     # self.signal = choices(levels)[0]
     # Select initial signal as 0
     self.signal = 0
+    self.power = 0
     # signal buffer
     self.signal_buffer.clear()
     self.signal_buffer.append(self.signal)
     self.charging_result = []
     self.initial_bat = []
     self.dic_bat = {}
+    self.dic_bat[0] = self.data[0, 2]
+
+    # Generate random price sequence
+    # self.price = np.append(self.price, random.random())
+    self.price = []
+    self.cost = 0
+    self.total_flexibility = 0
+    self.total_charging_error = 0
+    self.total_tracking_error = 0
+    self.total_reward = 0
+
+    self.penalty = 0
+    self.charging_result = []
+    self.initial_bat = []
     self.dic_bat[0] = self.data[0, 2]
     obs = np.append(self.state[:, 0:2].flatten(), self.signal)
     return obs, done
