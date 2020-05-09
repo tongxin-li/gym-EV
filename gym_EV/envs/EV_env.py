@@ -22,7 +22,7 @@ from collections import deque  # Ordered collection with ends
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, n_EVs=54, n_levels=10, max_capacity=20):
+  def __init__(self, max_ev=54, number_level=10, max_capacity=20):
     # Parameter for reward function
     self.alpha = 0
     self.beta = 0
@@ -32,8 +32,8 @@ class EVEnv(gym.Env):
     self.signal = None
     """
     self.state = None
-    self.n_EVs = n_EVs
-    self.n_levels = n_levels
+    self.n_EVs = max_ev
+    self.n_levels = number_level
     self._max_episode_steps = 100000
     self.flexibility = 0
     self.penalty = 0
