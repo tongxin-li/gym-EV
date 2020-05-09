@@ -252,7 +252,7 @@ class EVEnv(gym.Env):
     # Select a random day and restart
     # _, self.data = self.sample_episode(isTrain)
 
-    # Select day in an chronological order
+    # Select day in a chronological order
     _, self.data = self.get_episode_by_time(day)
     done = 0
     if len(self.data) == 0:
