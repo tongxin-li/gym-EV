@@ -21,7 +21,7 @@ from collections import deque  # Ordered collection with ends
 class EVEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, n_EVs=54, n_levels=10, max_energy=20):
+  def __init__(self, n_EVs=54, n_levels=10, max_capacity=20):
     # Parameter for reward function
     self.alpha = 0
     self.beta = 5
@@ -34,14 +34,14 @@ class EVEnv(gym.Env):
     self.flexibility = 0
     self.penalty = 0
     self.tracking_error = 0
-    self.max_energy = max_energy
+    self.max_capacity = max_capacity
     self.max_rate = 6
 
     # Specify the observation space
     lower_bound = np.array([0])
     upper_bound = np.array([24, 70])
     low = np.append(np.tile(lower_bound, self.n_EVs * 2), lower_bound)
-    high = np.append(np.tile(upper_bound, self.n_EVs), np.array([self.max_energy]))
+    high = np.append(np.tile(upper_bound, self.n_EVs), np.array([self.max_capacity]))
     self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
     # Specify the action space
@@ -109,7 +109,7 @@ class EVEnv(gym.Env):
     reward = (self.flexibility - self.tracking_error - self.penalty) / 100
 
     # Select a new tracking signal
-    levels = np.linspace(0, self.max_energy, num=self.n_levels)
+    levels = np.linspace(0, self.max_capacity, num=self.n_levels)
     # Set signal zero if feedback is allzero
     if not np.any(action[-self.n_levels:]):
       self.signal = 0
